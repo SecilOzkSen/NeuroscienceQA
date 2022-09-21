@@ -22,16 +22,15 @@ HuggingFace's transformers library. Original code is available at:
 import json
 
 import datasets
+import os
 
 logger = datasets.logging.get_logger(__name__)
 
 _DESCRIPTION = """\
 Neuroscience dataset.
 """
-_URLS = {
-    "train": "./dataset/train/train.json",
-    "dev": "./dataset/dev/dev.json",
-}
+
+WORKING_DIR = os.getcwd()
 
 
 class NeuroscienceTestFixtureConfig(datasets.BuilderConfig):
@@ -92,11 +91,11 @@ class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"filepath": "./dataset/train/train.json"},
+                gen_kwargs={"filepath": f"{WORKING_DIR}/dataset/train/train.json"},
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
-                gen_kwargs={"filepath": "./dataset/dev/dev.json"},
+                gen_kwargs={"filepath": f"{WORKING_DIR}/dataset/dev/dev.json"},
             ),
         ]
 
