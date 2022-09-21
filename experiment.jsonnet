@@ -3,7 +3,7 @@ local result_dir = std.extVar("OUTPUT_PATH");
 {
     "train_split_name": "train",
     "dev_split_name": "validation",
-    "pretrained_model_name_or_path": "deepset/xlm-roberta-base-squad2",
+    "pretrained_model_name_or_path": "deepset/xlm-roberta-large-squad2",
     "tokenizer_wrapper": {
         "type": "question-answering"
     },

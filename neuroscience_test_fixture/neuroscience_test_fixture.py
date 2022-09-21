@@ -79,9 +79,9 @@ class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
         )
 
     def _download_fixture_data(self):
-        with open("dataset/dev/dev.json", 'r') as dev_f:
+        with open("./dataset/dev/dev.json", 'r') as dev_f:
             dev_data = json.load(dev_f)
-        with open("dataset/train/train.json", 'r') as train_f:
+        with open("./dataset/train/train.json", 'r') as train_f:
             train_data = json.load(train_f)
         dataset = {}
         dataset["train"] = train_data
@@ -92,11 +92,11 @@ class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"filepath": "/home/secilsen/PycharmProjects/NeuroscienceQA/neuroscience_test_fixture/dataset/train/train.json"},
+                gen_kwargs={"filepath": "./dataset/train/train.json"},
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
-                gen_kwargs={"filepath": "/home/secilsen/PycharmProjects/NeuroscienceQA/neuroscience_test_fixture/dataset/dev/dev.json"},
+                gen_kwargs={"filepath": "./dataset/dev/dev.json"},
             ),
         ]
 
