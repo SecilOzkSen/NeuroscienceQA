@@ -91,11 +91,11 @@ class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"filepath": f"{WORKING_DIR}/dataset/train/train.json"},
+                gen_kwargs={"filepath": f"{WORKING_DIR}/neuroscience_test_fixture/dataset/train/train.json"},
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
-                gen_kwargs={"filepath": f"{WORKING_DIR}/dataset/dev/dev.json"},
+                gen_kwargs={"filepath": f"{WORKING_DIR}/neuroscience_test_fixture/dataset/dev/dev.json"},
             ),
         ]
 
