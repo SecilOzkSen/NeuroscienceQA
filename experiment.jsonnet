@@ -53,7 +53,6 @@ local result_dir = std.extVar("OUTPUT_PATH");
         "do_train": true,
         "do_eval": true,
         "save_total_limit": 1,
-        "max_length": 500,
     },
     "optimizer": {
         "type": "huggingface_adamw",
