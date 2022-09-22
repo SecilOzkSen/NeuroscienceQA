@@ -1,6 +1,4 @@
 import os
-
-
 from trapper.training.train import run_experiment
 import logging
 import sys
