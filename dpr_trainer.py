@@ -252,7 +252,7 @@ def calculate_top_k_accuracy(contexes, questions, dprModel, k=20):
 if __name__ == '__main__':
     # Data loading
     full_df = pd.read_csv(
-        '/home/secilsen/PycharmProjects/SquadOperations/policyQA/csv_format/policyQA_bsbs_sentence.csv', delimiter='|')
+        'policyQA_bsbs_sentence.csv', delimiter='|')
     full_df = full_df.drop(labels=['answer'], axis=1)
     train_context, valid_context, train_question, valid_question = train_test_split(full_df['context'].tolist(),
                                                                                     full_df['question'].tolist(),
