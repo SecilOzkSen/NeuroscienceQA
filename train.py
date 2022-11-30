@@ -3,7 +3,7 @@ from trapper.training.train import run_experiment
 import logging
 import sys
 
-EXPERIMENT_NAME = "roberta-large-squad2"
+EXPERIMENT_NAME = "roberta-base-squad2"
 
 WORKING_DIR = os.getcwd()
 PROJECT_ROOT = os.path.dirname(os.path.dirname(WORKING_DIR))

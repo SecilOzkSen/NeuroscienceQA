@@ -33,7 +33,7 @@ Neuroscience dataset.
 WORKING_DIR = os.getcwd()
 
 
-class NeuroscienceTestFixtureConfig(datasets.BuilderConfig):
+class PolicyQATestFixtureConfig(datasets.BuilderConfig):
     """
     BuilderConfig for SQUAD test data.
     Args:
@@ -44,11 +44,11 @@ class NeuroscienceTestFixtureConfig(datasets.BuilderConfig):
         super().__init__(**kwargs)
 
 
-class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
+class PolicyQATextFixture(datasets.GeneratorBasedBuilder):
     """A test dataset taken from SQUAD Version 1.1.  for trapper's QA modules"""
 
     BUILDER_CONFIGS = [
-        NeuroscienceTestFixtureConfig(
+        PolicyQATestFixtureConfig(
             name="policy_qa_test_fixture",
             version=datasets.Version("1.0.0", ""),
             description="PolicyQA test fixtures",
@@ -60,17 +60,11 @@ class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "id": datasets.Value("string"),
-                    "title": datasets.Value("string"),
-                    "context": datasets.Value("string"),
-                    "paragraph_ind": datasets.Value("int32"),
+                    "label": datasets.Value("int32"),
                     "question": datasets.Value("string"),
-                    "answers": datasets.features.Sequence(
-                        {
-                            "text": datasets.Value("string"),
-                            "answer_start": datasets.Value("int32"),
-                        }
-                    ),
+                    "sentence": datasets.Value("string"),
+                    "short_answer_in_sentence": datasets.Value("bool"),
+                    "sentence_in_long_answer": datasets.Value("bool")
                 }
             ),
             supervised_keys=None,
@@ -80,7 +74,7 @@ class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
     def _download_fixture_data(self):
         with open("dataset/dev/dev.json", 'r') as dev_f:
             dev_data = json.load(dev_f)
-        with open("dataset/dev/train.json", 'r') as train_f:
+        with open("dataset/train/train.json", 'r') as train_f:
             train_data = json.load(train_f)
         dataset = {}
         dataset["train"] = train_data
@@ -91,11 +85,11 @@ class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"filepath": f"{WORKING_DIR}/neuroscience_test_fixture/dataset/train/train.json"},
+                gen_kwargs={"filepath": f"{WORKING_DIR}/policyqa_text_fixture/dataset/train/train.json"},
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
-                gen_kwargs={"filepath": f"{WORKING_DIR}/neuroscience_test_fixture/dataset/dev/dev.json"},
+                gen_kwargs={"filepath": f"{WORKING_DIR}/policyqa_text_fixture/dataset/dev/dev.json"},
             ),
         ]
 
@@ -104,25 +98,18 @@ class NeuroscienceTestFixture(datasets.GeneratorBasedBuilder):
         logger.info("generating examples from = %s", filepath)
         key = 0
         with open(filepath, encoding="utf-8") as f:
-            squad = json.load(f)
-            for article in squad["data"]:
-                title = article.get("title", "")
-                for paragraph_ind, paragraph in enumerate(article["paragraphs"]):
-                    context = paragraph["context"]
-                    for qa in paragraph["qas"]:
-                        answer_starts = [
-                            answer["start"] for answer in qa["answers"]
-                        ]
-                        answers = [answer["text"] for answer in qa["answers"]]
-                        yield key, {
-                            "title": title,
-                            "context": context,
-                            "question": qa["question"],
-                            "paragraph_ind": paragraph_ind,
-                            "id": qa["id"],
-                            "answers": {
-                                "answer_start": answer_starts,
-                                "text": answers,
-                            },
+            json_str = json.load(f)
+            for data in json_str:
+                label = data.get("label", 0)
+                question = data.get("question", "")
+                sentence = data.get("sentence", "")
+                short_answer_in_sentence = data.get("short_answer_in_sentence", )
+                sentence_in_long_answer = data.get("sentence_in_long_answer", )
+                yield key, {
+                            "label": label,
+                            "question": question,
+                            "sentence": sentence,
+                            "short_answer_in_sentence": short_answer_in_sentence,
+                            "sentence_in_long_answer": sentence_in_long_answer,
                         }
-                        key += 1
+                key += 1

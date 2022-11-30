@@ -3,9 +3,9 @@ local result_dir = std.extVar("OUTPUT_PATH");
 {
     "train_split_name": "train",
     "dev_split_name": "validation",
-    "pretrained_model_name_or_path": "deepset/roberta-large-squad2",
+    "pretrained_model_name_or_path": "deepset/roberta-base-squad2",
     "tokenizer_wrapper": {
-        "type": "question-answering"
+        "type": "classification"
     },
     "dataset_loader": {
         "type": "default",
@@ -38,7 +38,7 @@ local result_dir = std.extVar("OUTPUT_PATH");
         "type": "default",
         "output_dir": checkpoint_dir,
         "result_dir": result_dir,
-        "num_train_epochs": 10,
+        "num_train_epochs": 40,
         "per_device_train_batch_size": 2,
         "gradient_accumulation_steps": 12,
         "per_device_eval_batch_size": 2,
