@@ -13,6 +13,8 @@ from typing import List, Dict, Union
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import top_k_accuracy_score, f1_score
 import os
+from tqdm import tqdm
+from time import sleep
 
 #context_tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
 #context_model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
@@ -275,23 +277,25 @@ if __name__ == '__main__':
         epoch_train_loss = []
         epoch_val_loss = []
         eval_accuracy = []
-        #  eval_f1 = []
-        print(len(train_dataloader))
-        for batch_train in train_dataloader:
-            optimizer.zero_grad()
-            scores = dpr_model(batch_train)
-            loss = criterion(scores, batch_train)
-            epoch_train_loss.append(loss)
-            loss.backward()
-            optimizer.step()
-        train_loss = torch.mean(torch.stack(epoch_train_loss))
-        for batch_valid in valid_dataloader:
-            scores = dpr_model(batch_valid)
-            loss = criterion(scores, batch_valid)
-            epoch_val_loss.append(loss)
+        with tqdm(train_dataloader, unit="batch") as tepoch:
+            for batch_train in tepoch:
+                optimizer.zero_grad()
+                scores = dpr_model(batch_train)
+                loss = criterion(scores, batch_train)
+                epoch_train_loss.append(loss)
+                loss.backward()
+                optimizer.step()
+                tepoch.set_postfix(loss=loss.item())
+                sleep(0.1)
+            train_loss = torch.mean(torch.stack(epoch_train_loss))
+            for batch_valid in valid_dataloader:
+                scores = dpr_model(batch_valid)
+                loss = criterion(scores, batch_valid)
+                epoch_val_loss.append(loss)
 
-        eval_acc = calculate_top_k_accuracy(contexes=valid_context, questions=valid_question, dprModel=dpr_model, k=20)
-        valid_loss = torch.mean(torch.stack(epoch_val_loss))
+            eval_acc = calculate_top_k_accuracy(contexes=valid_context, questions=valid_question, dprModel=dpr_model,
+                                                k=20)
+            valid_loss = torch.mean(torch.stack(epoch_val_loss))
 
         print(f"Epoch : {epoch + 1} Train Loss: {train_loss} Valid Loss: {valid_loss} Valid Top 20 accuracy: {eval_acc}")
         torch.save(dpr_model.state_dict(), os.path.join(MODEL_DIR, 'epoch-{}.pt'.format(epoch+1)))
