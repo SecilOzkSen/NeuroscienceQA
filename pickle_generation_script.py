@@ -27,5 +27,5 @@ def create_context_embeddings(contexes):
         pickle.dump({'contexes': contexes, 'embeddings': embeddings}, fIn)
 
 if __name__ == '__main__':
-    corpus_contexes, _ = load_pickle_file("/home/secilsen/PycharmProjects/semanticSearchDemo/context-embeddings.pkl")
+    corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
     create_context_embeddings(corpus_contexes)
