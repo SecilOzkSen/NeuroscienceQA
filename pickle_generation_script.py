@@ -1,6 +1,7 @@
 import copy
 import pickle
 from transformers import AutoModel, AutoTokenizer
+import json
 
 dpr_model = AutoModel.from_pretrained("secilozksen/dpr_policyqa", use_auth_token="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", trust_remote_code=True)
 dpr_context_model = copy.deepcopy(dpr_model.model.context_model)
@@ -14,6 +15,19 @@ def load_pickle_file(path):
         corpus_embeddings = cache_data['embeddings']
     return corpus_contexes, corpus_embeddings
 
+def load_squad_data(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    data = data['data']
+    contexes_list = []
+    for paragraphs in data:
+        for paragraph in paragraphs['paragraphs']:
+            context = paragraph['context'].lstrip('.')
+            context = context.strip(' ')
+            contexes_list.append(context)
+    return contexes_list
+
+
 def create_context_embeddings(contexes):
     embeddings = []
     for context in contexes:
@@ -23,9 +37,10 @@ def create_context_embeddings(contexes):
         pooler_outputs = context_embeddings['pooler_output']
         embeddings.append(pooler_outputs)
 
-    with open('dpr-context-embeddings.pkl', "wb") as fIn:
+    with open('basecamp-dpr-context-embeddings.pkl', "wb") as fIn:
         pickle.dump({'contexes': contexes, 'embeddings': embeddings}, fIn)
 
 if __name__ == '__main__':
-    corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
+  #  corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
+    corpus_contexes = load_squad_data('basecamp_squad.json')
     create_context_embeddings(corpus_contexes)
