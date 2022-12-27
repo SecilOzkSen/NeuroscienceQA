@@ -2,6 +2,7 @@ import copy
 import pickle
 from transformers import AutoModel, AutoTokenizer
 import json
+from sentence_transformers import SentenceTransformer
 
 dpr_model = AutoModel.from_pretrained("secilozksen/dpr_policyqa", use_auth_token="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", trust_remote_code=True)
 dpr_context_model = copy.deepcopy(dpr_model.model.context_model)
@@ -37,10 +38,17 @@ def create_context_embeddings(contexes):
         pooler_outputs = context_embeddings['pooler_output']
         embeddings.append(pooler_outputs)
 
-    with open('basecamp-dpr-context-embeddings.pkl', "wb") as fIn:
+    with open('basecamp-context-embeddings.pkl', "wb") as fIn:
         pickle.dump({'contexes': contexes, 'embeddings': embeddings}, fIn)
+
+def sentence_transformers_create_context_embeddings(contexes):
+    bi_encoder = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
+    bi_encoder.max_seq_length = 500
+    with open('st-context-embeddings.pkl', "wb") as fIn:
+        context_embeddings = bi_encoder.encode(contexes, convert_to_tensor=True, show_progress_bar=True)
+        pickle.dump({'contexes': contexes, 'embeddings': context_embeddings}, fIn)
 
 if __name__ == '__main__':
   #  corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
     corpus_contexes = load_squad_data('basecamp_squad.json')
-    create_context_embeddings(corpus_contexes)
+    sentence_transformers_create_context_embeddings(corpus_contexes)
