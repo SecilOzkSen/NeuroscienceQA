@@ -12,7 +12,7 @@ import os
 
 os.environ["WANDB_DISABLED"] = "true"
 
-BATCH_SIZE = 2
+BATCH_SIZE = 12
 MODEL_DIR = '/home/secilsen/PycharmProjects/NeuroscienceQA/DPR-model'
 EPOCH = 50
 
