@@ -13,7 +13,7 @@ import os
 os.environ["WANDB_DISABLED"] = "true"
 
 BATCH_SIZE = 12
-MODEL_DIR = '/home/secilsen/PycharmProjects/NeuroscienceQA/DPR-model'
+MODEL_DIR = 'DPR-model'
 EPOCH = 50
 
 context_tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
