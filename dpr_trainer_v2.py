@@ -318,7 +318,7 @@ if __name__ == '__main__':
 
     train_index, valid_index, train_question, valid_question = train_test_split(indexes,
                                                                                     full_df['question'].tolist(),
-                                                                                    test_size=0.01, random_state=8)
+                                                                                    test_size=0.1, random_state=8)
     context_list = full_df['context'].tolist()
     train_context = [context_list[i] for i in train_index]
     valid_context = [context_list[i] for i in valid_index]
