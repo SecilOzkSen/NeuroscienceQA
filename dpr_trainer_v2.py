@@ -341,12 +341,13 @@ if __name__ == '__main__':
     training_args = TrainingArguments(
         output_dir=MODEL_DIR,
         num_train_epochs=50,
+        save_total_limit=2,
         per_device_train_batch_size=1, #BATCH SIZE HERE SHOULD ALWAYS BE 1! WE HANDLE IN-BATCH NEGATIVES IN CUSTOM CLASSES.
         gradient_accumulation_steps=12,
         evaluation_strategy="epoch",
         save_strategy="no",
+        load_best_model_at_end=False,
         disable_tqdm=False,
-        load_best_model_at_end=True,
         warmup_steps=500,
         do_eval=True,
         fp16=True,
@@ -373,4 +374,5 @@ if __name__ == '__main__':
     )
     result = trainer.train()
     trainer.save_model(MODEL_DIR)
+    print(trainer.state.best_model_checkpoint)
 
