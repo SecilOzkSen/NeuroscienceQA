@@ -1,13 +1,9 @@
-import json
+
 import pandas as pd
 import os
-from datasets import Dataset
 from torch.utils.data import DataLoader
-
 from sklearn.model_selection import train_test_split
 from sentence_transformers.cross_encoder.evaluation import CESoftmaxAccuracyEvaluator
-
-from transformers import TrainingArguments
 import logging
 from sentence_transformers import LoggingHandler, util
 from sentence_transformers import InputExample, CrossEncoder
@@ -34,7 +30,7 @@ WEIGHT_DECAY = 0.01
 NUM_EPOCHS = 50
 BATCH_SIZE = 8
 
-def create_cross_encoder_dataset(contexes_list, questions_list, negatives_per_example = 7):
+def create_cross_encoder_dataset(contexes_list, questions_list, negatives_per_example = 11):
     data_size = len(questions_list)
     data_list = []
     for index, (question, context) in enumerate(zip(questions_list, contexes_list)):
@@ -70,7 +66,7 @@ if __name__ == '__main__':
               epochs=NUM_EPOCHS,
               evaluation_steps=len(train_dataset),
               warmup_steps=warmup_steps,
-              output_path='/home/secilsen/PycharmProjects/NeuroscienceQA/cross-encoder-model')
+              output_path='cross-encoder-model')
 
 
 

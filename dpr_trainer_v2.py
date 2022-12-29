@@ -312,7 +312,7 @@ class DPRValidationCallback(TrainerCallback):
 
 if __name__ == '__main__':
     full_df = pd.read_csv(
-        'policyQA_bsbs_sentence.csv', delimiter='|')
+        'basecamp.csv', delimiter='|')
     full_df = full_df.drop(labels=['answer'], axis=1)
     indexes = list(range(len(full_df.index)))
 
@@ -344,7 +344,7 @@ if __name__ == '__main__':
         per_device_train_batch_size=1, #BATCH SIZE HERE SHOULD ALWAYS BE 1! WE HANDLE IN-BATCH NEGATIVES IN CUSTOM CLASSES.
         gradient_accumulation_steps=12,
         evaluation_strategy="epoch",
-        save_strategy="epoch",
+        save_strategy="no",
         disable_tqdm=False,
         load_best_model_at_end=True,
         warmup_steps=500,
