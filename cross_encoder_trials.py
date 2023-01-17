@@ -12,7 +12,7 @@ def load_bi_encoder():
     return bi_encoder
 
 def load_trained_cross_encoder():
-    model = CrossEncoder("/home/secilsen/PycharmProjects/NeuroscienceQA/cross-encoder-model")
+    model = CrossEncoder("/home/secilsen/PycharmProjects/NeuroscienceQA/cross-encoder-model-contrastive")
     return model
 
 def load_trained_dpr_model():
@@ -69,7 +69,7 @@ def rerank_with_trained_cross_encoder(hits, question, contexes):
     cross_scores = trained_cross_encoder.predict(cross_inp)
     # Sort results by the cross-encoder scores
     for idx in range(len(cross_scores)):
-        hits[idx]['cross-score'] = cross_scores[idx][0]
+        hits[idx]['cross-score'] = cross_scores[idx]
 
     # Output of top-5 hits from re-ranker
     hits = sorted(hits, key=lambda x: x['cross-score'], reverse=True)
@@ -140,10 +140,10 @@ question_tokenizer = load_dpr_question_tokenizers()
 context_tokenizer = load_dpr_context_tokenizers()
 
 dpr_corpus_contexes, dpr_corpus_embeddings = load_pickle_file('/home/secilsen/PycharmProjects/semanticSearchDemo/custom-dpr-context-embeddings.pkl')
-corpus_contexes, corpus_embeddings = load_pickle_file('/home/secilsen/PycharmProjects/semanticSearchDemo/context-embeddings.pkl')
+corpus_contexes, corpus_embeddings = load_pickle_file('/data/st-context-embeddings.pkl')
 #question = 'How many times can you make a request for an amendment to a health record?'
 
-question = 'What is NASA\'s misssion?'
+question = 'Hello, how are you?'
 
 # Retrieve-Rerank with DPR
 #hits = retrieve_with_dpr_embeddings(question, dpr_corpus_embeddings)
@@ -156,13 +156,22 @@ question = 'What is NASA\'s misssion?'
 # DPR only:
 #top_5_scores, top_5_contexes = DPR_only(question, dpr_corpus_contexes, dpr_corpus_embeddings)
 
+# Retrieve-Rerank with DPR
+#hits, question_embedding = retrieve_with_dpr_embeddings(question, dpr_corpus_embeddings)
+#top_5_contexes, top_5_scores = rerank_with_DPR(hits, question_embedding, dpr_corpus_contexes, dpr_corpus_embeddings)
+#for context, score in zip(top_5_contexes, top_5_scores):
+#print(f"Score - {score}")
+#print(context)
+
 if __name__ == '__main__':
-    # Retrieve-Rerank with DPR
-    hits, question_embedding = retrieve_with_dpr_embeddings(question, dpr_corpus_embeddings)
-    top_5_contexes, top_5_scores = rerank_with_DPR(hits, question_embedding, dpr_corpus_contexes, dpr_corpus_embeddings)
+    # Retrieve-Rerank with trained cross encoder
+    # DPR only:
+    # top_5_scores, top_5_contexes = DPR_only(question, dpr_corpus_contexes, dpr_corpus_embeddings)
+    hits = retrieve(question, corpus_embeddings)
+    top_5_contexes, top_5_scores = rerank_with_trained_cross_encoder(hits, question, corpus_contexes)
     for context, score in zip(top_5_contexes, top_5_scores):
-        print(f"Score - {score}")
-        print(context)
+        print(f"score: {score} \n {context}")
+
 
 
 # Retrieve-Rerank with cross-encoder(trained)

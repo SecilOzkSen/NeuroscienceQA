@@ -105,7 +105,7 @@ if __name__ == "__main__":
     #dev_list = squad_formatter(list_of_files_dev, file_name_dev)
 #    add_end_of_sentence("/home/secilsen/PycharmProjects/SquadOperations/policyQA/bsbs_squad/full_sentence.json")
  #   training_json, dev_json = split_dev_train("/home/secilsen/PycharmProjects/SquadOperations/policyQA/bsbs_squad/full_sentence.json")
-    training_json, dev_json = split_dev_train_binary_policy("/home/secilsen/PycharmProjects/NeuroscienceQA/policyqa_text_fixture/dataset/binary_bsbs_full.json")
+    training_json, dev_json = split_dev_train_binary_policy("/policyqa_text_fixture/dataset/binary_bsbs_full.json")
 
     with open(train_save, 'w', encoding='utf-8') as f:
         json.dump(training_json, f)

@@ -9,15 +9,51 @@ from sklearn.model_selection import train_test_split
 from transformers import Trainer, TrainingArguments, TrainerCallback
 from torch.utils.data import Dataset
 import os
+from sentence_transformers import SentenceTransformer, CrossEncoder, util
+import pickle
+from difflib import SequenceMatcher
 
 os.environ["WANDB_DISABLED"] = "true"
 
 BATCH_SIZE = 12
-MODEL_DIR = 'DPR-model'
+MODEL_DIR = 'DPR-model-contrastive'
 EPOCH = 50
 
 context_tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
 question_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+
+bi_encoder = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
+bi_encoder.max_seq_length = 500
+cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+with open('data/st-context-embeddings.pkl', "rb") as fIn:
+    cache_data = pickle.load(fIn)
+    corpus_sentences = cache_data['contexes']
+    corpus_embeddings = cache_data['embeddings']
+cross_entropy_loss = nn.CrossEntropyLoss()
+
+def search(question):
+    # Semantic Search (Retrieve)
+    question_embedding = bi_encoder.encode(question, convert_to_tensor=True)
+    hits = util.semantic_search(question_embedding, corpus_embeddings, top_k=100)
+    if len(hits) == 0:
+        return []
+    hits = hits[0]
+    # Rerank - score all retrieved passages with cross-encoder
+    cross_inp = [[question, corpus_sentences[hit['corpus_id']]] for hit in hits]
+    cross_scores = cross_encoder.predict(cross_inp)
+
+    # Sort results by the cross-encoder scores
+    for idx in range(len(cross_scores)):
+        hits[idx]['cross-score'] = cross_scores[idx]
+
+    # Output of top-5 hits from re-ranker
+    hits = sorted(hits, key=lambda x: x['cross-score'], reverse=True)
+    top_5_contexes = []
+    top_5_scores = []
+    for hit in hits[:20]:
+        top_5_contexes.append(corpus_sentences[hit['corpus_id']])
+        top_5_scores.append(hit['cross-score'])
+    return top_5_contexes, top_5_scores
 
 
 class CustomDPRConfig(PretrainedConfig):
@@ -61,6 +97,7 @@ class CustomDPRDataset(Dataset):
         self.pos_neg_ratio = 2
         self.context_tokenizer = context_tokenizer
         self.question_tokenizer = question_tokenizer
+        self.upper_bound = 5
 
 
     def tokenize(self, batch: Union[List[Dict], Dict]):
@@ -90,12 +127,11 @@ class CustomDPRDataset(Dataset):
         context_index = self.indexes_list[index]
         batch = [dict(question=question, context=gt_context, label=1)]
         if self.loss_strategy == 'contrastive_loss':
-            negatives_count = 1
-            negatives_index = index + 1
-            for i in range(negatives_count):
-                context_list_index = 0 if negatives_index >= self.data_size - 1  else negatives_index + 1
-                batch.append(dict(question=question, context=self.contexes_list[context_list_index], label=0))
-                negatives_index += 1
+            top_20_contexes, _ = search(question)
+            for negative_context in top_20_contexes[self.upper_bound:self.upper_bound + self.batch_size - 1]:
+                if SequenceMatcher(gt_context, negative_context).ratio() >= 0.9:
+                    continue
+                batch.append(dict(question=question, context=negative_context, label=0))
         else:
             for i in range(self.batch_size - 1):
                 negative_context_index = context_index
@@ -129,7 +165,7 @@ class DPRModel(nn.Module):
         self.freeze_params = freeze_params
         self.question_model = DPRQuestionEncoder.from_pretrained(question_model_name)
         self.context_model = DPRContextEncoder.from_pretrained(context_model_name)
-    #    self.freeze_layers(freeze_params)
+        self.freeze_layers(freeze_params)
 
     def freeze_layers(self, freeze_params):
         num_layers_context = sum(1 for _ in self.context_model.parameters())
@@ -172,12 +208,11 @@ class DPRModel(nn.Module):
 class ContrastiveTensionLossInBatchNegatives(nn.Module):
     def __init__(self, scale: float = 20.0, strategy='contrastive_loss'):
         super(ContrastiveTensionLossInBatchNegatives, self).__init__()
-        self.cross_entropy_loss = nn.CrossEntropyLoss()
+        self.cross_entropy_loss = nn.BCEWithLogitsLoss()
         self.negative_log_likelihood = nn.NLLLoss()
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(scale))
         if strategy == 'contrastive_loss':
             self.loss_func = self.contrastive_tension_loss
-            self.m = 2.0
         else:
             self.loss_func = self.negative_likelihood_of_positive_passages_v2
 
@@ -185,29 +220,24 @@ class ContrastiveTensionLossInBatchNegatives(nn.Module):
         labels_list = batch['labels']
         return self.loss_func(scores, labels_list)
 
-    def contrastive_tension_loss(self, scores, labels):
+    def contrastive_tension_loss_old(self, scores, labels):
         # we need to maximize the loss here!
         loss = 0
-        for label, score in zip(labels, scores):
-            if label == 0:
-                delta = self.m - score
-                delta = torch.clamp(delta, min=0.0, max=None)
-                loss += torch.mean(torch.pow(delta, 2))
-            else:
-                loss += torch.mean(torch.pow(score, 2))
-        return loss / len(scores)
-
-    def negative_likelihood_of_positive_passages(self, scores, labels):  # one positive others negative.
-        sum_of_negatives = []
-        positive_score = 0.
         for score, label in zip(scores, labels):
-            res = torch.clamp(torch.exp(score[0]), min=0.0, max=None)
+            res = torch.clamp(score, min=0.0, max=None)
             if label == 0:
-                sum_of_negatives.append(res)
+                logit = torch.logit(1-res, eps=1e-6)
             else:
-                positive_score = res  # SUPPOSE THAT ONLY ONE POSITIVE PASSAGE IN THE BATCH!!!!!!
-        likelihood = positive_score / (positive_score + torch.sum(torch.tensor(sum_of_negatives)))
-        return -torch.log(likelihood)
+                logit = torch.logit(res, eps=1e-6)
+            loss += -torch.log(logit)
+        lss = loss / len(scores)
+        return lss
+
+    def contrastive_tension_loss(self, scores, labels:List[torch.Tensor]):
+        positive_index = np.where(labels.detach().cpu().numpy() == 1)
+        res = torch.logsumexp(scores, dim=0) - (scores[positive_index[0]] * torch.log(torch.exp(torch.tensor(1))))
+        return res
+
 
     def negative_likelihood_of_positive_passages_v2(self, scores, labels:List[torch.Tensor]):
         positive_index = np.where(labels.detach().cpu().numpy() == 1)
@@ -224,6 +254,7 @@ class DPRTrainer(Trainer):
         scores = model(inputs)
         loss = self.criterion(scores, inputs)
         return (loss, scores) if return_outputs else loss
+
 
 
 def calculate_topk_accuracy(contexes, questions, dprModel, K_range, random_question_size=20):
@@ -305,14 +336,16 @@ class DPRValidationCallback(TrainerCallback):
 
     def on_evaluate(self, args, state, control, **kwargs):
         model = kwargs.get("model")
+        metrics = kwargs.get("metrics")
         accuracy_dict = calculate_topk_accuracy(self.valid_contexes, self.valid_questions, model, K_range=self.K,
                                            random_question_size=self.rand_question_selected)
-        state.log_history[-1]['accuracies'] = accuracy_dict
+        metrics['eval_top_1_accuracy'] = accuracy_dict['top_1_accuracy']
+        state.log_history[-1]['eval_accuracies'] = accuracy_dict
 
 
 if __name__ == '__main__':
     full_df = pd.read_csv(
-        'basecamp.csv', delimiter='|')
+        'data/basecamp.csv', delimiter='|')
     full_df = full_df.drop(labels=['answer'], axis=1)
     indexes = list(range(len(full_df.index)))
 
@@ -328,14 +361,14 @@ if __name__ == '__main__':
                                      indexes_list=train_index,
                                      context_tokenizer=context_tokenizer,
                                      question_tokenizer=question_tokenizer,
-                                     loss_strategy='negative_ll_positive_loss')
+                                     loss_strategy='contrastive_loss')
     valid_dataset = CustomDPRDataset(
         contexes_list=valid_context,
         questions_list=valid_question,
         indexes_list=valid_index,
         context_tokenizer=context_tokenizer,
         question_tokenizer=question_tokenizer,
-        loss_strategy='negative_ll_positive_loss'
+        loss_strategy='contrastive_loss'
     )
 
     training_args = TrainingArguments(
@@ -345,8 +378,10 @@ if __name__ == '__main__':
         per_device_train_batch_size=1, #BATCH SIZE HERE SHOULD ALWAYS BE 1! WE HANDLE IN-BATCH NEGATIVES IN CUSTOM CLASSES.
         gradient_accumulation_steps=12,
         evaluation_strategy="epoch",
-        save_strategy="no",
-        load_best_model_at_end=False,
+        save_strategy="epoch",
+        load_best_model_at_end=True,
+       # metric_for_best_model='top_1_accuracy',
+       # greater_is_better=True,
         disable_tqdm=False,
         warmup_steps=500,
         do_eval=True,
@@ -366,7 +401,7 @@ if __name__ == '__main__':
     trainer = DPRTrainer(
         model=model,
         args=training_args,
-        loss_strategy='negative_ll_positive_loss',
+        loss_strategy='contrastive_loss',
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
         callbacks=[DPRValidationCallback(valid_context, valid_question)],
