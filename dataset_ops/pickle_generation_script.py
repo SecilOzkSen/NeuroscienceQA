@@ -74,7 +74,7 @@ def mean_pooling(token_embeddings, mask):
 if __name__ == '__main__':
     #  corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
     #    corpus_contexes = load_squad_data('/home/secilsen/PycharmProjects/SquadOperations/basecamp_bsbs.json')
-    corpus_df = load_csv('../data/basecamp.csv')
+    corpus_df = load_csv('data/basecamp.csv')
     corpus_contexes = corpus_df['context'].tolist()
     corpus_ids = corpus_df['context_id'].tolist()
     create_context_embeddings(corpus_contexes, corpus_ids)
