@@ -49,12 +49,12 @@ def create_context_embeddings(contexes):
     for context in contexes:
         if context in contexes_list:
             continue
-        contexes_list.append(context)
         tokenized = dpr_tokenizer(context, padding=True, truncation=True, return_tensors="pt")
         context_embeddings = dpr_context_model(**tokenized)
         # pooler_outputs = context_embeddings['pooler_output']
         embeddings_context = mean_pooling(context_embeddings[0], tokenized['attention_mask'])
         embeddings.append(embeddings_context)
+        contexes_list.append(context)
 
     with open('basecamp-dpr-contriever-embeddings.pkl', "wb") as fIn:
         pickle.dump({'contexes': contexes_list, 'embeddings': embeddings}, fIn)
