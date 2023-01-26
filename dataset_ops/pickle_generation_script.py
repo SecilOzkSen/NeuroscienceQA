@@ -57,7 +57,7 @@ def create_context_embeddings(contexes):
         embeddings.append(embeddings_context)
 
     with open('basecamp-dpr-contriever-embeddings.pkl', "wb") as fIn:
-        pickle.dump({'contexes': contexes, 'embeddings': embeddings}, fIn)
+        pickle.dump({'contexes': contexes_list, 'embeddings': embeddings}, fIn)
 
 
 def sentence_transformers_create_context_embeddings(contexes):
