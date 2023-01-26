@@ -43,9 +43,13 @@ def load_csv(path):
     return data
 
 
-def create_context_embeddings(contexes, contexes_id):
+def create_context_embeddings(contexes):
     embeddings = []
+    contexes_list = []
     for context in contexes:
+        if context in contexes_list:
+            continue
+        contexes_list.append(context)
         tokenized = dpr_tokenizer(context, padding=True, truncation=True, return_tensors="pt",
                                   add_special_tokens=True)
         context_embeddings = dpr_context_model(**tokenized)
@@ -54,15 +58,15 @@ def create_context_embeddings(contexes, contexes_id):
         embeddings.append(embeddings_context)
 
     with open('basecamp-dpr-contriever-embeddings.pkl', "wb") as fIn:
-        pickle.dump({'contexes_id': contexes_id, 'contexes': contexes, 'embeddings': embeddings}, fIn)
+        pickle.dump({'contexes': contexes, 'embeddings': embeddings}, fIn)
 
 
-def sentence_transformers_create_context_embeddings(contexes, contexes_id):
+def sentence_transformers_create_context_embeddings(contexes):
     bi_encoder = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
     bi_encoder.max_seq_length = 500
     with open('data/st-context-embeddings.pkl', "wb") as fIn:
         context_embeddings = bi_encoder.encode(contexes, convert_to_tensor=True, show_progress_bar=True)
-        pickle.dump({'contexes_id': contexes_id, 'contexes': contexes, 'embeddings': context_embeddings}, fIn)
+        pickle.dump({'contexes': contexes, 'embeddings': context_embeddings}, fIn)
 
 
 def mean_pooling(token_embeddings, mask):
@@ -74,9 +78,9 @@ def mean_pooling(token_embeddings, mask):
 if __name__ == '__main__':
     #  corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
     #    corpus_contexes = load_squad_data('/home/secilsen/PycharmProjects/SquadOperations/basecamp_bsbs.json')
-    corpus_df = load_csv('data/basecamp.csv')
+    corpus_df = load_csv('../data/basecamp.csv')
     corpus_contexes = corpus_df['context'].tolist()
     corpus_ids = corpus_df['context_id'].tolist()
-    create_context_embeddings(corpus_contexes, corpus_ids)
+    create_context_embeddings(corpus_contexes)
 
 #  sentence_transformers_create_context_embeddings(corpus_contexes, corpus_ids)
