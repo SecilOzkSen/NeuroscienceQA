@@ -50,7 +50,7 @@ def create_context_embeddings(contexes, contexes_id):
                                   add_special_tokens=True)
         context_embeddings = dpr_context_model(**tokenized)
         # pooler_outputs = context_embeddings['pooler_output']
-        embeddings_context = mean_pooling(context_embeddings[0], context_embeddings['attention_mask'])
+        embeddings_context = mean_pooling(context_embeddings[0], tokenized['attention_mask'])
         embeddings.append(embeddings_context)
 
     with open('basecamp-dpr-contriever-embeddings.pkl', "wb") as fIn:
@@ -74,7 +74,7 @@ def mean_pooling(token_embeddings, mask):
 if __name__ == '__main__':
     #  corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
     #    corpus_contexes = load_squad_data('/home/secilsen/PycharmProjects/SquadOperations/basecamp_bsbs.json')
-    corpus_df = load_csv('./data/basecamp.csv')
+    corpus_df = load_csv('../data/basecamp.csv')
     corpus_contexes = corpus_df['context'].tolist()
     corpus_ids = corpus_df['context_id'].tolist()
     create_context_embeddings(corpus_contexes, corpus_ids)
