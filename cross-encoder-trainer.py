@@ -74,7 +74,7 @@ def create_cross_encoder_dataset_hard_negatives(contexes_list, questions_list, n
         batch = [InputExample(texts=[question, context], label=1)]
         top_20_contexes, _ = search(question)
         for negative_context in top_20_contexes[upper_bound:upper_bound+negatives_per_example]:
-            if SequenceMatcher(context, negative_context).ratio() >= 0.9:
+            if context.strip() == negative_context.strip():
                 continue
             batch.append(InputExample(texts=[question, negative_context], label=0))
         data_list.extend(batch)
@@ -102,19 +102,6 @@ def contrastive_tension_loss_in_batch_negatives(scores, labels):
     positive_index = np.where(labels.detach().cpu().numpy() == 1)
     res = torch.logsumexp(scores, dim=0) - (scores[positive_index[0]] * torch.log(torch.exp(torch.tensor(1))))
     return res
-
-
-def contrastive_tension_loss(self, scores, labels):
-    # we need to maximize the loss here!
-    loss = 0
-    for label, score in zip(labels, scores):
-        if label == 0:
-            delta = self.m - score
-            delta = torch.clamp(delta, min=0.0, max=None)
-            loss += torch.mean(torch.pow(delta, 2))
-        else:
-            loss += torch.mean(torch.pow(score, 2))
-    return loss / len(scores)
 
 
 os.environ["WANDB_DISABLED"] = "true"

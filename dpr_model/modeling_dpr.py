@@ -1,4 +1,4 @@
-from transformers import PreTrainedModel, DPRQuestionEncoder, DPRContextEncoder
+from transformers import PreTrainedModel, AutoModel, AutoTokenizer
 import torch
 import torch.nn as nn
 from .configuration_dpr import CustomDPRConfig
@@ -19,14 +19,11 @@ class OBSSDPRModel(PreTrainedModel):
 
 class DPRModel(nn.Module):
     def __init__(self,
-                 question_model_name='facebook/dpr-question_encoder-single-nq-base',
-                 context_model_name='facebook/dpr-ctx_encoder-single-nq-base',
-                 freeze_params=12.0):
+                 question_model_name='facebook/contriever-msmarco',
+                 context_model_name='facebook/contriever-msmarco'):
         super(DPRModel, self).__init__()
-        self.freeze_params = freeze_params
-        self.question_model = DPRQuestionEncoder.from_pretrained(question_model_name)
-        self.context_model = DPRContextEncoder.from_pretrained(context_model_name)
-    #    self.freeze_layers(freeze_params)
+        self.question_model = AutoModel.from_pretrained(question_model_name)
+        self.context_model = AutoModel.from_pretrained(context_model_name)
 
     def freeze_layers(self, freeze_params):
         num_layers_context = sum(1 for _ in self.context_model.parameters())
@@ -52,15 +49,18 @@ class DPRModel(nn.Module):
         result = torch.squeeze(result, dim=1)
         return result
 
+    ##FOR CONTRIEVER
+    def mean_pooling(self, token_embeddings, mask):
+        token_embeddings = token_embeddings.masked_fill(~mask[..., None].bool(), 0.)
+        sentence_embeddings = token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
+        return sentence_embeddings
+
     def forward(self, batch: Union[List[Dict], Dict]):
         context_tensor = batch['context_tensor']
         question_tensor = batch['question_tensor']
-        context_model_output = self.context_model(input_ids=context_tensor['input_ids'],
-                                                  attention_mask=context_tensor['attention_mask'])  # (bsz, hdim)
-        question_model_output = self.question_model(input_ids = question_tensor['input_ids'],
-                                                    attention_mask=question_tensor['attention_mask'])
-        embeddings_context = context_model_output['pooler_output']
-        embeddings_question = question_model_output['pooler_output']
-
+        context_model_output = self.context_model(**context_tensor)
+        question_model_output = self.question_model(**question_tensor)
+        embeddings_context = self.mean_pooling(context_model_output[0], context_tensor['attention_mask'])
+        embeddings_question = self.mean_pooling(question_model_output[0], question_tensor['attention_mask'])
         scores = self.batch_dot_product(embeddings_context, embeddings_question)  # self.scale
         return scores

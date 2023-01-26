@@ -1,7 +1,7 @@
 from transformers import PreTrainedModel, DPRQuestionEncoder, DPRContextEncoder
 import torch
 import torch.nn as nn
-from dpr_model_contrastive_sentence.configuration_dpr_contrastive_sentence import CustomDPRConfig
+from .configuration_dpr_contrastive_sentence import CustomDPRConfig
 from typing import Union, List, Dict
 
 class OBSSDPRContrastiveSentence(PreTrainedModel):

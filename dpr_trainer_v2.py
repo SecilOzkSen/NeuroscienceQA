@@ -1,5 +1,6 @@
 from transformers import DPRContextEncoderTokenizer, \
-    DPRContextEncoder, DPRQuestionEncoderTokenizer, DPRQuestionEncoder, PreTrainedModel, PretrainedConfig
+    DPRContextEncoder, DPRQuestionEncoderTokenizer, DPRQuestionEncoder, PreTrainedModel, PretrainedConfig, AutoModel, \
+    AutoTokenizer
 import pandas as pd
 from torch import nn
 import random
@@ -15,21 +16,24 @@ from difflib import SequenceMatcher
 
 os.environ["WANDB_DISABLED"] = "true"
 
-BATCH_SIZE = 12
+BATCH_SIZE = 6
 MODEL_DIR = 'DPR-model-contrastive'
 EPOCH = 50
 
-context_tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-question_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+# context_tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+# question_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+
+context_tokenizer = AutoTokenizer.from_pretrained('facebook/contriever-msmarco')
+question_tokenizer = AutoTokenizer.from_pretrained('facebook/contriever-msmarco')
 
 bi_encoder = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
 bi_encoder.max_seq_length = 500
-cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+# cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 with open('data/st-context-embeddings.pkl', "rb") as fIn:
     cache_data = pickle.load(fIn)
     corpus_sentences = cache_data['contexes']
     corpus_embeddings = cache_data['embeddings']
-cross_entropy_loss = nn.CrossEntropyLoss()
+
 
 def search(question):
     # Semantic Search (Retrieve)
@@ -38,6 +42,16 @@ def search(question):
     if len(hits) == 0:
         return []
     hits = hits[0]
+    hits = sorted(hits, key=lambda x: x['score'], reverse=True)
+    top_5_contexes = []
+    top_5_scores = []
+    for hit in hits[:20]:
+        top_5_contexes.append(corpus_sentences[hit['corpus_id']])
+        top_5_scores.append(hit['score'])
+    return top_5_contexes, top_5_scores
+
+
+'''
     # Rerank - score all retrieved passages with cross-encoder
     cross_inp = [[question, corpus_sentences[hit['corpus_id']]] for hit in hits]
     cross_scores = cross_encoder.predict(cross_inp)
@@ -53,11 +67,12 @@ def search(question):
     for hit in hits[:20]:
         top_5_contexes.append(corpus_sentences[hit['corpus_id']])
         top_5_scores.append(hit['cross-score'])
-    return top_5_contexes, top_5_scores
+    return top_5_contexes, top_5_scores '''
 
 
 class CustomDPRConfig(PretrainedConfig):
     model_type = 'dpr'
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -80,7 +95,7 @@ class CustomDPRDataset(Dataset):
                  indexes_list,
                  context_tokenizer,
                  question_tokenizer,
-                 batch_size = BATCH_SIZE,
+                 batch_size=BATCH_SIZE,
                  loss_strategy='negative_ll_positive_loss',
                  ):
         # contexes and questions must be in the same order (contexes_list[i], questions_list[i] pair label should be equal to 1.)
@@ -98,7 +113,6 @@ class CustomDPRDataset(Dataset):
         self.context_tokenizer = context_tokenizer
         self.question_tokenizer = question_tokenizer
         self.upper_bound = 5
-
 
     def tokenize(self, batch: Union[List[Dict], Dict]):
         contextes = []
@@ -120,7 +134,6 @@ class CustomDPRDataset(Dataset):
                                                   add_special_tokens=True)
         return [context_tensor, question_tensor], torch.stack(labels)
 
-
     def __getitem__(self, index):
         question = self.questions_list[index]
         gt_context = self.contexes_list[index]
@@ -128,8 +141,10 @@ class CustomDPRDataset(Dataset):
         batch = [dict(question=question, context=gt_context, label=1)]
         if self.loss_strategy == 'contrastive_loss':
             top_20_contexes, _ = search(question)
-            for negative_context in top_20_contexes[self.upper_bound:self.upper_bound + self.batch_size - 1]:
-                if SequenceMatcher(gt_context, negative_context).ratio() >= 0.9:
+            for negative_context in top_20_contexes:
+                if len(batch) >= BATCH_SIZE:
+                    break
+                if gt_context.strip() == negative_context.strip():
                     continue
                 batch.append(dict(question=question, context=negative_context, label=0))
         else:
@@ -158,14 +173,11 @@ class CustomDPRDataset(Dataset):
 
 class DPRModel(nn.Module):
     def __init__(self,
-                 question_model_name='facebook/dpr-question_encoder-single-nq-base',
-                 context_model_name='facebook/dpr-ctx_encoder-single-nq-base',
-                 freeze_params=12.0):
+                 question_model_name='facebook/contriever-msmarco',
+                 context_model_name='facebook/contriever-msmarco'):
         super(DPRModel, self).__init__()
-        self.freeze_params = freeze_params
-        self.question_model = DPRQuestionEncoder.from_pretrained(question_model_name)
-        self.context_model = DPRContextEncoder.from_pretrained(context_model_name)
-        self.freeze_layers(freeze_params)
+        self.question_model = AutoModel.from_pretrained(question_model_name)
+        self.context_model = AutoModel.from_pretrained(context_model_name)
 
     def freeze_layers(self, freeze_params):
         num_layers_context = sum(1 for _ in self.context_model.parameters())
@@ -191,70 +203,60 @@ class DPRModel(nn.Module):
         result = torch.squeeze(result, dim=1)
         return result
 
+    def euclidian_distance(self, context_output, question_output):
+        dist = (question_output - context_output).pow(2)
+        dist = dist.sum(1).sqrt()
+        return dist
+
+    ##FOR CONTRIEVER
+    def mean_pooling(self, token_embeddings, mask):
+        token_embeddings = token_embeddings.masked_fill(~mask[..., None].bool(), 0.)
+        sentence_embeddings = token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
+        return sentence_embeddings
+
     def forward(self, batch: Union[List[Dict], Dict]):
         context_tensor = batch['context_tensor']
         question_tensor = batch['question_tensor']
-        context_model_output = self.context_model(input_ids=context_tensor['input_ids'],
-                                                  attention_mask=context_tensor['attention_mask'])  # (bsz, hdim)
-        question_model_output = self.question_model(input_ids = question_tensor['input_ids'],
-                                                    attention_mask=question_tensor['attention_mask'])
-        embeddings_context = context_model_output['pooler_output']
-        embeddings_question = question_model_output['pooler_output']
+        #      context_model_output = self.context_model(input_ids=context_tensor['input_ids'],
+        #                                                attention_mask=context_tensor['attention_mask'])  # (bsz, hdim)
+        #     question_model_output = self.question_model(input_ids = question_tensor['input_ids'],
+        #                                                 attention_mask=question_tensor['attention_mask'])
+        #     embeddings_context = context_model_output['pooler_output']
+        #     embeddings_question = question_model_output['pooler_output']
 
+        ### FOR CONTRIEVER
+        context_model_output = self.context_model(**context_tensor)
+        question_model_output = self.question_model(**question_tensor)
+        embeddings_context = self.mean_pooling(context_model_output[0], context_tensor['attention_mask'])
+        embeddings_question = self.mean_pooling(question_model_output[0], question_tensor['attention_mask'])
         scores = self.batch_dot_product(embeddings_context, embeddings_question)  # self.scale
+        #scores = self.euclidian_distance(embeddings_context, embeddings_question)
         return scores
 
 
-class ContrastiveTensionLossInBatchNegatives(nn.Module):
-    def __init__(self, scale: float = 20.0, strategy='contrastive_loss'):
-        super(ContrastiveTensionLossInBatchNegatives, self).__init__()
-        self.cross_entropy_loss = nn.BCEWithLogitsLoss()
-        self.negative_log_likelihood = nn.NLLLoss()
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(scale))
-        if strategy == 'contrastive_loss':
-            self.loss_func = self.contrastive_tension_loss
-        else:
-            self.loss_func = self.negative_likelihood_of_positive_passages_v2
+class DPRTrainer(Trainer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.softmax_op = nn.LogSoftmax(dim=0)
+        self.temperature = 0.1
 
-    def forward(self, scores, batch):
-        labels_list = batch['labels']
-        return self.loss_func(scores, labels_list)
-
-    def contrastive_tension_loss_old(self, scores, labels):
-        # we need to maximize the loss here!
-        loss = 0
-        for score, label in zip(scores, labels):
-            res = torch.clamp(score, min=0.0, max=None)
-            if label == 0:
-                logit = torch.logit(1-res, eps=1e-6)
-            else:
-                logit = torch.logit(res, eps=1e-6)
-            loss += -torch.log(logit)
-        lss = loss / len(scores)
-        return lss
-
-    def contrastive_tension_loss(self, scores, labels:List[torch.Tensor]):
+    def contrastive_tension_loss_in_batch_negatives_v2(self, scores, labels):
+        scores = scores / self.temperature
         positive_index = np.where(labels.detach().cpu().numpy() == 1)
-        res = torch.logsumexp(scores, dim=0) - (scores[positive_index[0]] * torch.log(torch.exp(torch.tensor(1))))
-        return res
+        softmax_out = self.softmax_op(scores)
+        loss = -softmax_out[positive_index]
+        return loss[0]
 
-
-    def negative_likelihood_of_positive_passages_v2(self, scores, labels:List[torch.Tensor]):
+    def contrastive_tension_loss_in_batch_negatives(self, scores, labels):
+        #without temperature parameter.
         positive_index = np.where(labels.detach().cpu().numpy() == 1)
         res = torch.logsumexp(scores, dim=0) - (scores[positive_index[0]] * torch.log(torch.exp(torch.tensor(1))))
         return res[0]
 
-
-class DPRTrainer(Trainer):
-    def __init__(self, loss_strategy="contrastive_loss", **kwargs):
-        super().__init__(**kwargs)
-        self.criterion = ContrastiveTensionLossInBatchNegatives(strategy=loss_strategy)
-
     def compute_loss(self, model, inputs, return_outputs=False):
         scores = model(inputs)
-        loss = self.criterion(scores, inputs)
+        loss = self.contrastive_tension_loss_in_batch_negatives_v2(scores, inputs['labels'])
         return (loss, scores) if return_outputs else loss
-
 
 
 def calculate_topk_accuracy(contexes, questions, dprModel, K_range, random_question_size=20):
@@ -272,8 +274,9 @@ def calculate_topk_accuracy(contexes, questions, dprModel, K_range, random_quest
         for i, random_index in enumerate(random_indexes):
             if random_index == index_q:
                 gt_labels[i] = 1
-            tokenized_context = context_tokenizer(contexes[random_index], padding=True, truncation=True, return_tensors="pt",
-                                                add_special_tokens=True)
+            tokenized_context = context_tokenizer(contexes[random_index], padding=True, truncation=True,
+                                                  return_tensors="pt",
+                                                  add_special_tokens=True)
             tokenized_context.to('cuda')
             input_dict = dict(context_tensor=tokenized_context, question_tensor=tokenized_question)
             score = dprModel(input_dict)
@@ -282,42 +285,28 @@ def calculate_topk_accuracy(contexes, questions, dprModel, K_range, random_quest
         # Top K ranked accuracy calculation
         for _k in range(K_range):
             acc = 0.
-            for index in sorted_indexes[:_k+1]:
+            for index in sorted_indexes[:_k + 1]:
                 if gt_labels[index] == 1:
                     acc = 1.
                     break
             accuracies[index_q, _k] = acc
+    mean_acc = 0.
     for j in range(K_range):
         acc = np.mean(accuracies[:, j])
-        acc_dic[f'top_{j+1}_accuracy'] = acc
+        acc_dic[f'top_{j + 1}_accuracy'] = acc
+        mean_acc += acc
+    acc_dic[f'acc_average'] = mean_acc/K_range
     return acc_dic
 
-class CustomDataCollator:
+
+class DPRDataCollator:
     def collate_function(self, data):
         tensors, labels = data[0]
         context_tensor, question_tensor = tensors
         return dict(context_tensor=context_tensor,
-              #      context_attention_mask=context_tensor['attention_mask'],
                     question_tensor=question_tensor,
-             #       question_attention_mask=question_tensor['attention_mask'],
                     labels=labels)
-    def __call__(self, data):
-        return self.collate_function(data)
 
-class CustomDataCollatorForContrastiveLoss:
-    def collate_function(self, data):
-        ctx_tensors = []
-        lbl_tensors = []
-        for tensors, labels in data:
-            context_tensor, question_tensor = tensors
-            ctx_tensors.extend(context_tensor)
-            lbl_tensors.extend(question_tensor)
-
-        return dict(context_tensor=ctx_tensors,
-              #      context_attention_mask=context_tensor['attention_mask'],
-                    question_tensor=lbl_tensors,
-             #       question_attention_mask=question_tensor['attention_mask'],
-                    labels=labels)
     def __call__(self, data):
         return self.collate_function(data)
 
@@ -327,7 +316,7 @@ class DPRValidationCallback(TrainerCallback):
                  valid_contexes,
                  valid_questions,
                  K=5,
-                 rand_question_selected=20):
+                 rand_question_selected=38):
         self.validation_scores = []
         self.K = K
         self.rand_question_selected = rand_question_selected
@@ -338,8 +327,9 @@ class DPRValidationCallback(TrainerCallback):
         model = kwargs.get("model")
         metrics = kwargs.get("metrics")
         accuracy_dict = calculate_topk_accuracy(self.valid_contexes, self.valid_questions, model, K_range=self.K,
-                                           random_question_size=self.rand_question_selected)
+                                                random_question_size=self.rand_question_selected)
         metrics['eval_top_1_accuracy'] = accuracy_dict['top_1_accuracy']
+        metrics['eval_acc_accuracy'] = accuracy_dict['acc_average']
         state.log_history[-1]['eval_accuracies'] = accuracy_dict
 
 
@@ -350,8 +340,8 @@ if __name__ == '__main__':
     indexes = list(range(len(full_df.index)))
 
     train_index, valid_index, train_question, valid_question = train_test_split(indexes,
-                                                                                    full_df['question'].tolist(),
-                                                                                    test_size=0.1, random_state=8)
+                                                                                full_df['question'].tolist(),
+                                                                                test_size=0.1, random_state=8)
     context_list = full_df['context'].tolist()
     train_context = [context_list[i] for i in train_index]
     valid_context = [context_list[i] for i in valid_index]
@@ -373,15 +363,17 @@ if __name__ == '__main__':
 
     training_args = TrainingArguments(
         output_dir=MODEL_DIR,
-        num_train_epochs=50,
-        save_total_limit=2,
-        per_device_train_batch_size=1, #BATCH SIZE HERE SHOULD ALWAYS BE 1! WE HANDLE IN-BATCH NEGATIVES IN CUSTOM CLASSES.
-        gradient_accumulation_steps=12,
+        num_train_epochs=EPOCH,
+        save_total_limit=5,
+        per_device_train_batch_size=1,
+        # BATCH SIZE HERE SHOULD ALWAYS BE 1! WE HANDLE IN-BATCH NEGATIVES IN CUSTOM CLASSES.
+        gradient_accumulation_steps=4,
+        per_device_eval_batch_size=1,
         evaluation_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
-       # metric_for_best_model='top_1_accuracy',
-       # greater_is_better=True,
+        metric_for_best_model='eval_acc_accuracy',
+        greater_is_better=True,
         disable_tqdm=False,
         warmup_steps=500,
         do_eval=True,
@@ -401,13 +393,11 @@ if __name__ == '__main__':
     trainer = DPRTrainer(
         model=model,
         args=training_args,
-        loss_strategy='contrastive_loss',
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
         callbacks=[DPRValidationCallback(valid_context, valid_question)],
-        data_collator=CustomDataCollator(),
+        data_collator=DPRDataCollator(),
     )
     result = trainer.train()
     trainer.save_model(MODEL_DIR)
     print(trainer.state.best_model_checkpoint)
-

@@ -7,11 +7,14 @@ import json
 from sentence_transformers import SentenceTransformer
 import spacy
 
-dpr_model = AutoModel.from_pretrained("secilozksen/dpr_basecamp_contrastive_sentence", use_auth_token="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", trust_remote_code=True)
+dpr_model = AutoModel.from_pretrained("secilozksen/dpr_basecamp_contriever_contrastive",
+                                      use_auth_token="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", trust_remote_code=True)
 dpr_context_model = copy.deepcopy(dpr_model.model.context_model)
 del dpr_model
-dpr_tokenizer = AutoTokenizer.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base")
-nlp = spacy.load("en_core_web_sm")
+dpr_tokenizer = AutoTokenizer.from_pretrained("facebook/contriever-msmarco")
+
+
+# nlp = spacy.load("en_core_web_sm")
 
 def load_pickle_file(path):
     with open(path, "rb") as fIn:
@@ -19,6 +22,7 @@ def load_pickle_file(path):
         corpus_contexes = cache_data['contexes']
         corpus_embeddings = cache_data['embeddings']
     return corpus_contexes, corpus_embeddings
+
 
 def load_squad_data(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -32,6 +36,7 @@ def load_squad_data(path):
             contexes_list.append(context)
     return contexes_list
 
+
 def load_csv(path):
     data = pd.read_csv(path, delimiter='|', encoding='utf-8')
     data = data.drop_duplicates(subset=['context_id'], keep='first')
@@ -41,30 +46,37 @@ def load_csv(path):
 def create_context_embeddings(contexes, contexes_id):
     embeddings = []
     for context in contexes:
-        sentences = nlp(context)
-        sentences_list = [sentence.text for sentence in sentences.sents]
-        tokenized = dpr_tokenizer(sentences_list, padding=True, truncation=True, return_tensors="pt",
-                                      add_special_tokens=True, max_length=512)
+        tokenized = dpr_tokenizer(context, padding=True, truncation=True, return_tensors="pt",
+                                  add_special_tokens=True)
         context_embeddings = dpr_context_model(**tokenized)
-        pooler_outputs = context_embeddings['pooler_output']
-        embeddings.append(pooler_outputs)
+        # pooler_outputs = context_embeddings['pooler_output']
+        embeddings_context = mean_pooling(context_embeddings[0], context_embeddings['attention_mask'])
+        embeddings.append(embeddings_context)
 
-    with open('basecamp-dpr-sentence-embeddings.pkl', "wb") as fIn:
-        pickle.dump({'contexes_id':contexes_id, 'contexes': contexes, 'embeddings': embeddings}, fIn)
+    with open('basecamp-dpr-contriever-embeddings.pkl', "wb") as fIn:
+        pickle.dump({'contexes_id': contexes_id, 'contexes': contexes, 'embeddings': embeddings}, fIn)
+
 
 def sentence_transformers_create_context_embeddings(contexes, contexes_id):
     bi_encoder = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
     bi_encoder.max_seq_length = 500
     with open('data/st-context-embeddings.pkl', "wb") as fIn:
         context_embeddings = bi_encoder.encode(contexes, convert_to_tensor=True, show_progress_bar=True)
-        pickle.dump({'contexes_id':contexes_id, 'contexes': contexes, 'embeddings': context_embeddings}, fIn)
+        pickle.dump({'contexes_id': contexes_id, 'contexes': contexes, 'embeddings': context_embeddings}, fIn)
+
+
+def mean_pooling(token_embeddings, mask):
+    token_embeddings = token_embeddings.masked_fill(~mask[..., None].bool(), 0.)
+    sentence_embeddings = token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
+    return sentence_embeddings
+
 
 if __name__ == '__main__':
-  #  corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
-#    corpus_contexes = load_squad_data('/home/secilsen/PycharmProjects/SquadOperations/basecamp_bsbs.json')
+    #  corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
+    #    corpus_contexes = load_squad_data('/home/secilsen/PycharmProjects/SquadOperations/basecamp_bsbs.json')
     corpus_df = load_csv('./data/basecamp.csv')
     corpus_contexes = corpus_df['context'].tolist()
     corpus_ids = corpus_df['context_id'].tolist()
     create_context_embeddings(corpus_contexes, corpus_ids)
 
-  #  sentence_transformers_create_context_embeddings(corpus_contexes, corpus_ids)
+#  sentence_transformers_create_context_embeddings(corpus_contexes, corpus_ids)
