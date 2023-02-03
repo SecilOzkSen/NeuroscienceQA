@@ -173,11 +173,13 @@ class CustomDPRDataset(Dataset):
 
 class DPRModel(nn.Module):
     def __init__(self,
-                 question_model_name='/home/secilsen/PycharmProjects/NeuroscienceQA/domain-adapted-contriever/checkpoint-1440',
-                 context_model_name='/home/secilsen/PycharmProjects/NeuroscienceQA/domain-adapted-contriever/checkpoint-1440'):
+                 question_model_name='secilozksen/domain-adapted-contriever',
+                 context_model_name='secilozksen/domain-adapted-contriever'):
         super(DPRModel, self).__init__()
-        self.question_model = AutoModel.from_pretrained(question_model_name, local_files_only=True)
-        self.context_model = AutoModel.from_pretrained(context_model_name, local_files_only=True)
+        self.question_model = AutoModel.from_pretrained(question_model_name, use_auth_token='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',
+                                            trust_remote_code=True)
+        self.context_model = AutoModel.from_pretrained(context_model_name, use_auth_token='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',
+                                            trust_remote_code=True)
 
     def freeze_layers(self, freeze_params):
         num_layers_context = sum(1 for _ in self.context_model.parameters())
