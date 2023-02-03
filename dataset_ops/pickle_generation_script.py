@@ -57,15 +57,16 @@ def create_context_embeddings(contexes):
         contexes_list.append(context)
 
     with open('basecamp-dpr-contriever-embeddings.pkl', "wb") as fIn:
-        pickle.dump({'contexes': contexes_list, 'embeddings': embeddings}, fIn)
+        pickle.dump({'contexe/home/secilsen/PycharmProjects/semanticSearchDemos': contexes_list, 'embeddings': embeddings}, fIn)
 
 
 def sentence_transformers_create_context_embeddings(contexes):
     bi_encoder = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
     bi_encoder.max_seq_length = 500
-    with open('data/st-context-embeddings.pkl', "wb") as fIn:
-        context_embeddings = bi_encoder.encode(contexes, convert_to_tensor=True, show_progress_bar=True)
-        pickle.dump({'contexes': contexes, 'embeddings': context_embeddings}, fIn)
+    context_new = list(set(contexes))
+    with open('../data/st-context-embeddings.pkl', "wb") as fIn:
+        context_embeddings = bi_encoder.encode(context_new, convert_to_tensor=True, show_progress_bar=True)
+        pickle.dump({'contexes': context_new, 'embeddings': context_embeddings}, fIn)
 
 
 def mean_pooling(token_embeddings, mask):
@@ -77,9 +78,9 @@ def mean_pooling(token_embeddings, mask):
 if __name__ == '__main__':
     #  corpus_contexes, _ = load_pickle_file("context-embeddings.pkl")
     #    corpus_contexes = load_squad_data('/home/secilsen/PycharmProjects/SquadOperations/basecamp_bsbs.json')
-    corpus_df = load_csv('data/basecamp.csv')
+    corpus_df = load_csv('../data/basecamp.csv')
     corpus_contexes = corpus_df['context'].tolist()
     corpus_ids = corpus_df['context_id'].tolist()
-    create_context_embeddings(corpus_contexes)
+  #  create_context_embeddings(corpus_contexes)
 
-#  sentence_transformers_create_context_embeddings(corpus_contexes, corpus_ids)
+    sentence_transformers_create_context_embeddings(corpus_contexes)

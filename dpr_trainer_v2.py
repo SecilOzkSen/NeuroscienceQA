@@ -17,7 +17,7 @@ from difflib import SequenceMatcher
 os.environ["WANDB_DISABLED"] = "true"
 
 BATCH_SIZE = 6
-MODEL_DIR = 'DPR-model-contrastive'
+MODEL_DIR = 'DPR-model-contrastive-finetuned'
 EPOCH = 50
 
 # context_tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
@@ -173,11 +173,11 @@ class CustomDPRDataset(Dataset):
 
 class DPRModel(nn.Module):
     def __init__(self,
-                 question_model_name='facebook/contriever-msmarco',
-                 context_model_name='facebook/contriever-msmarco'):
+                 question_model_name='/home/secilsen/PycharmProjects/NeuroscienceQA/domain-adapted-contriever/checkpoint-1440',
+                 context_model_name='/home/secilsen/PycharmProjects/NeuroscienceQA/domain-adapted-contriever/checkpoint-1440'):
         super(DPRModel, self).__init__()
-        self.question_model = AutoModel.from_pretrained(question_model_name)
-        self.context_model = AutoModel.from_pretrained(context_model_name)
+        self.question_model = AutoModel.from_pretrained(question_model_name, local_files_only=True)
+        self.context_model = AutoModel.from_pretrained(context_model_name, local_files_only=True)
 
     def freeze_layers(self, freeze_params):
         num_layers_context = sum(1 for _ in self.context_model.parameters())

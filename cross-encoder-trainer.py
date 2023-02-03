@@ -33,7 +33,7 @@ LEARNING_RATE = 2e-5
 LR_WARMUP_STEPS = 500
 WEIGHT_DECAY = 0.01
 NUM_EPOCHS = 50
-BATCH_SIZE = 12
+BATCH_SIZE = 6
 
 bi_encoder = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1')
 bi_encoder.max_seq_length = 500
@@ -68,7 +68,7 @@ def search(question):
         top_5_scores.append(hit['cross-score'])
     return top_5_contexes, top_5_scores
 
-def create_cross_encoder_dataset_hard_negatives(contexes_list, questions_list, negatives_per_example = 11, upper_bound=5):
+def create_cross_encoder_dataset_hard_negatives(contexes_list, questions_list, negatives_per_example = 5, upper_bound=5):
     data_list = []
     for index, (question, context) in enumerate(zip(questions_list, contexes_list)):
         batch = [InputExample(texts=[question, context], label=1)]
@@ -80,7 +80,7 @@ def create_cross_encoder_dataset_hard_negatives(contexes_list, questions_list, n
         data_list.extend(batch)
     return data_list
 
-def create_cross_encoder_dataset(contexes_list, questions_list, indexes_list, negatives_per_example = 11):
+def create_cross_encoder_dataset(contexes_list, questions_list, indexes_list, negatives_per_example = 5):
     data_size = len(questions_list)
     data_list = []
     for index, (question, context, context_index) in enumerate(zip(questions_list, contexes_list, indexes_list)):
@@ -99,9 +99,12 @@ def create_cross_encoder_dataset(contexes_list, questions_list, indexes_list, ne
     return data_list
 
 def contrastive_tension_loss_in_batch_negatives(scores, labels):
+    softmax_op = nn.LogSoftmax(dim=0)
+    scores = scores / 0.1
     positive_index = np.where(labels.detach().cpu().numpy() == 1)
-    res = torch.logsumexp(scores, dim=0) - (scores[positive_index[0]] * torch.log(torch.exp(torch.tensor(1))))
-    return res
+    softmax_out = softmax_op(scores)
+    loss = -softmax_out[positive_index]
+    return loss[0]
 
 
 os.environ["WANDB_DISABLED"] = "true"
@@ -117,9 +120,9 @@ if __name__ == '__main__':
     context_list = full_df['context'].tolist()
     train_context = [context_list[i] for i in train_index]
     valid_context = [context_list[i] for i in valid_index]
-    train_dataset = create_cross_encoder_dataset_hard_negatives(train_context, train_question) #in-batch negatives implemented.
-    valid_dataset = create_cross_encoder_dataset_hard_negatives(valid_context, valid_question)  # in-batch negatives implemented.
-    model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', num_labels=1)
+    train_dataset = create_cross_encoder_dataset_hard_negatives(train_context, train_question, negatives_per_example=BATCH_SIZE-1) #in-batch negatives implemented.
+    valid_dataset = create_cross_encoder_dataset_hard_negatives(valid_context, valid_question, negatives_per_example=BATCH_SIZE-1)  # in-batch negatives implemented.
+    model = CrossEncoder('facebook/contriever-msmarco', num_labels=1)
     train_dataloader = DataLoader(train_dataset, shuffle=False, batch_size=BATCH_SIZE)
     evaluator = CEBinaryClassificationEvaluator.from_input_examples(valid_dataset, name='basecamp-valid')
 
@@ -129,7 +132,7 @@ if __name__ == '__main__':
               loss_fct=contrastive_tension_loss_in_batch_negatives,
               evaluator=evaluator,
               epochs=NUM_EPOCHS,
-              evaluation_steps=len(train_dataset),
+              evaluation_steps=len(valid_dataset),
               warmup_steps=warmup_steps,
               output_path='cross-encoder-model-contrastive')
 
